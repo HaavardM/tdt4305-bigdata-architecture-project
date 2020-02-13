@@ -10,6 +10,7 @@ object task1 {
     sc.setLogLevel("ERROR")
 
     val helloWorldString = "Hello world"
-    print(helloWorldString)
+    println(helloWorldString)
+    sc.stop()
   }
 }
