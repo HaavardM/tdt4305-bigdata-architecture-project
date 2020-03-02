@@ -24,6 +24,9 @@ object part1 {
   val BusinessStarsIndex = 8
   val BusinessReviewCountIndex = 9
   val BusinessCategoriesIndex = 10
+
+  val FriendshipSourceIndex = 0
+  val FriendshipDestionationIndex = 1
   
   def main(args: Array[String]) = {
     val conf = new SparkConf().
@@ -60,7 +63,7 @@ object part1 {
       reduceByKey(_+_)
     val reviewsMinTimestamp = new DateTime(reviewsUnixTimestamp.min()*1000).toDateTime()
     val reviewsMaxTimestamp = new DateTime(reviewsUnixTimestamp.max()*1000).toDateTime()
-
+    reviewsPerYear.saveAsTextFile("results/reviewsPerYear.csv")
 
     //E) Calculate the Pearson Correlation Coefficient
     //Create an RDD with (user_id, (1, review_length)) for each review
@@ -131,6 +134,22 @@ object part1 {
       (postalCode, (latitudeSum / businesses, longitudeSum / businesses))
     })
 
+    //Task 4: Friendship graph
+    //A) Find top 10 most active nodes
+    val friendshipCount = topUsersFriendshipRDD.flatMap(l => {
+      val lineSplit = l.split(',')
+      Array(
+        //UserID => (OutCount, InCount)
+        (lineSplit(FriendshipSourceIndex), (1, 0)),
+        (lineSplit(FriendshipDestionationIndex), (0, 1))
+      )
+    }).reduceByKey((first, second) => {
+      (first._1 + second._1, first._2 + second._2)
+    })
+    friendshipCount.saveAsTextFile("results/friendship_count.csv")
+
+    val top10InFriendships = friendshipCount.takeOrdered(10)(Ordering.Int.reverse.on(_._2._2))
+    val top10OutFriendships = friendshipCount.takeOrdered(10)(Ordering.Int.reverse.on(_._2._1))
 
     //Print results
     println("Task 1: LineCount")
@@ -145,22 +164,28 @@ object part1 {
     top10Business.map(v => v._1).foreach(v => println("   - " + v))
     println("d) Number of reviews per year: ")
     reviewsPerYear.sortBy(_._1).foreach(y => printf("   %d: %d\n", y._1, y._2))
-    printf("e) First and last review: first = %s, last = %s\n",
+    printf("e) First and last review:\n   first = %s\n   last = %s\n",
       reviewsMinTimestamp.toString("yyyy/MM/dd hh:mm:ss"),
       reviewsMaxTimestamp.toString("yyyy/MM/dd hh:mm:ss"))
     printf("f) Pearson correlation coefficient = %.6f\n", pcc)
     println("====================================================================")
     println("Task 3: Businesses")
     println("a) Average rating by city:")
-    avgBusinessRatingByCity.foreach(city => printf("   - %s: %.3f\n", city._1, city._2))
+    avgBusinessRatingByCity.take(5).foreach(city => printf("   - %s => %.3f\n", city._1, city._2))
     println("b) Top 10 categories:")
     top10BusinessCategories.foreach(category => printf("   - %s\n", category))
     println("c) Postal code centroids: ")
-    businessPostalCodeCentroid.take(5).foreach(postalCode => printf("   - %s: %.6f (lat), %.6f (lon)\n",
+    businessPostalCodeCentroid.take(5).foreach(postalCode => printf("   - %s => %.6f (lat), %.6f (lon)\n",
       postalCode._1,
       postalCode._2._1,
       postalCode._2._2
     ))
+    println("Task 4: Friendship graph")
+    println("a) Top 10 nodes:")
+    println("   IN")
+    top10InFriendships.foreach(u => printf("   - %s => %d (in), %d (out)\n", u._1, u._2._1, u._2._2))
+    println("   OUT")
+    top10OutFriendships.foreach(u => printf("   - %s => %d (in), %d (out)\n", u._1, u._2._1, u._2._2))
     sc.stop()
   }
 }
