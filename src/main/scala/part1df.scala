@@ -39,7 +39,11 @@ object part1df {
 
     //Part 2:
     //a)
-    val joinTable = topReviewsDF.join(businessesDF, topReviewsDF("business_id") === businessesDF("business_id"))
+    //Join reviews and businesses table by business_id
+    val joinTable = topReviewsDF.join(businessesDF, Seq("business_id"))
+    joinTable.show(5)
+    //joinTable.coalesce(1).write.csv("results/join_dataframe.csv")
+    //Find the top 20 most active users
     topReviewsDF.groupBy("user_id").count().sort(desc("count")).show(20)
     spark.stop()
 
