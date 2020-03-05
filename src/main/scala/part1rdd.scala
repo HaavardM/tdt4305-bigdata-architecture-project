@@ -228,18 +228,18 @@ object part1rdd {
     */
     //Print results
     println("Task 1: LineCount")
-    println("- businesses    = " + businessCount)
-    println("- top_reviewers = " + reviewCount)
-    println("- top_users_edges     = " + friendsipEdgeCount)
+    println("- businesses      => " + businessCount)
+    println("- top_reviewers   => " + reviewCount)
+    println("- top_users_edges => " + friendsipEdgeCount)
     println("=====================================================================")
     println("Task 2: Top Reviews")
-    println("a) Number of distinct users           = " + distinctUserCount)
-    println("b) Average review length              = " + avgReviewLength)
+    println("a) Number of distinct users => " + distinctUserCount)
+    println("b) Average review length    => " + avgReviewLength)
     println("c) Top 10 businesses sorted by reviews: " )
     top10Business.map(v => v._1).foreach(v => println("   - " + v))
     println("d) Number of reviews per year: ")
-    reviewsPerYear.sortBy(_._1).foreach(y => printf("   %d: %d\n", y._1, y._2))
-    printf("e) First and last review:\n   first = %s\n   last = %s\n",
+    reviewsPerYear.sortBy(_._1).foreach(y => printf("   - %d => %d reviews\n", y._1, y._2))
+    printf("e) First and last review:\n   - first => %s\n   - last => %s\n",
       reviewsMinTimestamp.toString("yyyy/MM/dd hh:mm:ss"),
       reviewsMaxTimestamp.toString("yyyy/MM/dd hh:mm:ss"))
     printf("f) Pearson correlation coefficient = %.6f\n", pcc)
@@ -264,11 +264,11 @@ object part1rdd {
     top10OutFriendshipsUsers.foreach(u => printf("   - %s => %d (in), %d (out)\n", u._1, u._2._2, u._2._1))
     println("b) Average and median friendship edges:")
     println("   IN: ")
-    printf("     Mean: %.2f\n", friendshipAverageEdgesIn)
-    printf("     Median: %.2f\n", medianFriendshipEdgesIn)
+    printf("     Mean => %.2f\n", friendshipAverageEdgesIn)
+    printf("     Median => %.2f\n", medianFriendshipEdgesIn)
     println("   OUT: ")
-    printf("     Mean: %.2f\n", friendshipAverageEdgesOut)
-    printf("     Median: %.2f\n", medianFriendshipEdgesOut)
+    printf("     Mean => %.2f\n", friendshipAverageEdgesOut)
+    printf("     Median => %.2f\n", medianFriendshipEdgesOut)
     sc.stop()
   }
 }
