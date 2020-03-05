@@ -2,6 +2,7 @@
 import org.apache.spark.{SparkConf, SparkContext}
 import java.util.{Base64}
 import java.nio.charset.StandardCharsets
+import scala.util.control.Breaks._
 
 import org.joda.time.DateTime
 
@@ -40,10 +41,11 @@ object part1 {
     val topReviewersRDD = sc.textFile("data/yelp_top_reviewers_with_reviews.csv").mapPartitionsWithIndex((index, it) => if (index == 0) it.drop(1) else it)
     val topUsersFriendshipRDD = sc.textFile("data/yelp_top_users_friendship_graph.csv").mapPartitionsWithIndex((index, it) => if (index == 0) it.drop(1) else it) 
 
+    println(businessesRDD.count())
     //Task 1 - count line numbers for each RDD
     val businessCount = businessesRDD.count()
     val reviewCount = topReviewersRDD.count()
-    val userCount = topUsersFriendshipRDD.count()
+    val friendsipEdgeCount = topUsersFriendshipRDD.count()
     //Task 2 - explore reviews
     //A) Find distinct users
     val distinctUserCount = topReviewersRDD.map(_.split('\t')(ReviewsUserIndex)).distinct().count()
@@ -63,7 +65,6 @@ object part1 {
       reduceByKey(_+_)
     val reviewsMinTimestamp = new DateTime(reviewsUnixTimestamp.min()*1000).toDateTime()
     val reviewsMaxTimestamp = new DateTime(reviewsUnixTimestamp.max()*1000).toDateTime()
-    reviewsPerYear.saveAsTextFile("results/reviewsPerYear.csv")
 
     //E) Calculate the Pearson Correlation Coefficient
     //Create an RDD with (user_id, (1, review_length)) for each review
@@ -75,7 +76,7 @@ object part1 {
     })
 
     //Get the average number of reviews for all users (X_mean)
-    val avgReviewsPerUser = reviewCount / userCount
+    val avgReviewsPerUser = reviewCount / distinctUserCount
 
     //Sum the tuples by key and divide the review length sum by the number of reviews.
     //Each element then contains the number of reviews and the average review length for one user
@@ -136,7 +137,7 @@ object part1 {
 
     //Task 4: Friendship graph
     //A) Find top 10 most active nodes
-    val friendshipCount = topUsersFriendshipRDD.flatMap(l => {
+    val friendshipDegrees = topUsersFriendshipRDD.flatMap(l => {
       val lineSplit = l.split(',')
       Array(
         //UserID => (OutCount, InCount)
@@ -146,16 +147,60 @@ object part1 {
     }).reduceByKey((first, second) => {
       (first._1 + second._1, first._2 + second._2)
     })
-    friendshipCount.saveAsTextFile("results/friendship_count.csv")
 
-    val top10InFriendships = friendshipCount.takeOrdered(10)(Ordering.Int.reverse.on(_._2._2))
-    val top10OutFriendships = friendshipCount.takeOrdered(10)(Ordering.Int.reverse.on(_._2._1))
+    val top10InFriendships = friendshipDegrees.takeOrdered(10)(Ordering.Int.reverse.on(_._2._2))
+    val top10OutFriendships = friendshipDegrees.takeOrdered(10)(Ordering.Int.reverse.on(_._2._1))
+
+    val sumDegrees = friendshipDegrees.map(l => (1, l._2)).reduce((first, second) => {
+      (first._1 + second._1, (first._2._1 + second._2._1, first._2._2 + second._2._2))
+    })
+    val friendshipDistinctUserCount = sumDegrees._1
+    val averageDegreesOut = sumDegrees._2._1.toFloat / friendshipDistinctUserCount.toFloat
+    val averageDegreesIn = sumDegrees._2._2.toFloat / friendshipDistinctUserCount.toFloat
+
+    val tempOut = friendshipDegrees.
+      map(l => (l._2._1, 1)).
+      reduceByKey(_+_).
+      coalesce(1).
+      sortByKey().
+      collect()
+
+    val tempIn = friendshipDegrees.
+      map(l => (l._2._2, 1)).
+      reduceByKey(_+_).
+      coalesce(1).
+      sortByKey().
+      collect()
+
+    def getMedian(v: Array[(Int, Int)], numUsers: Int): Float = {
+      var sum = 0
+      var median = -1.0f
+      val stop = numUsers / 2
+      breakable {
+        for (i <- v.indices) {
+          sum = sum + v(i)._2
+          if (sum == stop) {
+            if (friendsipEdgeCount % 2 == 0) {
+              median = (v(i)._1 + v(i + 1)._1).toFloat / 2.0f
+              break
+            } else {
+              median = v(i)._1.toFloat
+              break
+            }
+          } else if (sum > stop) {
+            median = v(i)._1.toFloat
+            break
+          }
+        }
+      }
+      median
+    }
 
     //Print results
     println("Task 1: LineCount")
     println("- businesses    = " + businessCount)
     println("- top_reviewers = " + reviewCount)
-    println("- top_users     = " + userCount)
+    println("- top_users_edges     = " + friendsipEdgeCount)
     println("=====================================================================")
     println("Task 2: Top Reviews")
     println("a) Number of distinct users           = " + distinctUserCount)
@@ -183,9 +228,17 @@ object part1 {
     println("Task 4: Friendship graph")
     println("a) Top 10 nodes:")
     println("   IN")
-    top10InFriendships.foreach(u => printf("   - %s => %d (in), %d (out)\n", u._1, u._2._1, u._2._2))
+    top10InFriendships.foreach(u => printf("   - %s => %d (in), %d (out)\n", u._1, u._2._2, u._2._1))
     println("   OUT")
-    top10OutFriendships.foreach(u => printf("   - %s => %d (in), %d (out)\n", u._1, u._2._1, u._2._2))
+    top10OutFriendships.foreach(u => printf("   - %s => %d (in), %d (out)\n", u._1, u._2._2, u._2._1))
+    println("b) Average and median degrees:")
+    println("   IN: ")
+    printf("     Mean: %.2f\n", averageDegreesIn)
+    printf("     Median: %.2f\n", getMedian(tempIn, friendshipDistinctUserCount))
+    println("   OUT: ")
+    printf("     Mean: %.2f\n", averageDegreesOut)
+    printf("     Median: %.2f\n", getMedian(tempOut, friendshipDistinctUserCount))
+
     sc.stop()
   }
 }
