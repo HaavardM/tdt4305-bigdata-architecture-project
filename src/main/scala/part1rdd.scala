@@ -6,7 +6,7 @@ import scala.util.control.Breaks._
 
 import org.joda.time.DateTime
 
-object part1 {
+object part1rdd {
 
   val ReviewsIDIndex = 0
   val ReviewsUserIndex = 1
@@ -251,10 +251,10 @@ object part1 {
     println("b) Average and median friendship edges:")
     println("   IN: ")
     printf("     Mean: %.2f\n", averageFriendshipEdgesIn)
-    printf("     Median: %.2f\n", )
+    printf("     Median: %.2f\n", medianFriendshipEdgesIn)
     println("   OUT: ")
     printf("     Mean: %.2f\n", averageFriendshipEdgesOut)
-    printf("     Median: %.2f\n", getMedianFromCompressedEdgeCounts(compressedDegreesOut, friendshipDistinctUserCount))
+    printf("     Median: %.2f\n", medianFriendshipEdgesOut)
     sc.stop()
   }
 }
