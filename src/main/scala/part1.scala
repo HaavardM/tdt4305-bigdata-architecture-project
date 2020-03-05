@@ -39,9 +39,7 @@ object part1 {
     //Task 0 - load data into seperate RDDs and drop first line (description)
     val businessesRDD = sc.textFile("data/yelp_businesses.csv").mapPartitionsWithIndex((index, it) => if (index == 0) it.drop(1) else it)
     val topReviewersRDD = sc.textFile("data/yelp_top_reviewers_with_reviews.csv").mapPartitionsWithIndex((index, it) => if (index == 0) it.drop(1) else it)
-    val topUsersFriendshipRDD = sc.textFile("data/yelp_top_users_friendship_graph.csv").mapPartitionsWithIndex((index, it) => if (index == 0) it.drop(1) else it) 
-
-    println(businessesRDD.count())
+    val topUsersFriendshipRDD = sc.textFile("data/yelp_top_users_friendship_graph.csv").mapPartitionsWithIndex((index, it) => if (index == 0) it.drop(1) else it)
     //Task 1 - count line numbers for each RDD
     val businessCount = businessesRDD.count()
     val reviewCount = topReviewersRDD.count()
@@ -151,43 +149,59 @@ object part1 {
     val top10InFriendships = friendshipDegrees.takeOrdered(10)(Ordering.Int.reverse.on(_._2._2))
     val top10OutFriendships = friendshipDegrees.takeOrdered(10)(Ordering.Int.reverse.on(_._2._1))
 
-    val sumDegrees = friendshipDegrees.map(l => (1, l._2)).reduce((first, second) => {
-      (first._1 + second._1, (first._2._1 + second._2._1, first._2._2 + second._2._2))
+    //B) Compute median and average number of edges
+    //Average is calculated by finding the number of users and the number of in/out edges,
+    //sumDegrees: (NumberOfUsers, (SumOutEdges, SumInEdges))
+    val sumDegrees = friendshipDegrees.map(l => (1, l._2._1, l._2._1)).reduce((first, second) => {
+      (first._1 + second._1, first._2 + second._2, first._3 + second._3)
     })
     val friendshipDistinctUserCount = sumDegrees._1
-    val averageDegreesOut = sumDegrees._2._1.toFloat / friendshipDistinctUserCount.toFloat
-    val averageDegreesIn = sumDegrees._2._2.toFloat / friendshipDistinctUserCount.toFloat
+    val averageFriendshipEdgesOut = sumDegrees._2.toFloat / friendshipDistinctUserCount.toFloat
+    val averageFriendshipEdgesIn = sumDegrees._3.toFloat / friendshipDistinctUserCount.toFloat
 
-    val tempOut = friendshipDegrees.
+    //To calculate the median we need to sort the edge counts for each user
+    //and pick the middle one. We start by "compressing" the dataset by converting
+    //many identical counts to one tuple (i.e 1, 1, 1, 1, 1 => (1, 5))
+    //OutCount => Number of user with OutCount
+    val compressedDegreesOut = friendshipDegrees.
       map(l => (l._2._1, 1)).
       reduceByKey(_+_).
       coalesce(1).
       sortByKey().
       collect()
 
-    val tempIn = friendshipDegrees.
+    //InCount => Number of user with InCount
+    val compressedDegreesIn = friendshipDegrees.
       map(l => (l._2._2, 1)).
       reduceByKey(_+_).
       coalesce(1).
       sortByKey().
       collect()
 
-    def getMedian(v: Array[(Int, Int)], numUsers: Int): Float = {
+
+    def getMedianFromCompressedEdgeCounts(v: Array[(Int, Int)], numUsers: Int): Float = {
       var sum = 0
       var median = -1.0f
-      val stop = numUsers / 2
+      val middle = numUsers / 2
       breakable {
         for (i <- v.indices) {
           sum = sum + v(i)._2
-          if (sum == stop) {
+          //If the middle is between two different values
+          if (sum == middle) {
+            //If even number of elements, take the average of the two neighbouring values
             if (friendsipEdgeCount % 2 == 0) {
               median = (v(i)._1 + v(i + 1)._1).toFloat / 2.0f
               break
-            } else {
+            }
+            //If odd number of elements, select the element
+            else {
               median = v(i)._1.toFloat
               break
             }
-          } else if (sum > stop) {
+          }
+          //The values is the chunk, so it does not matter if the number of elements
+          //are odd or not as the median would be the same
+          else if (sum > middle) {
             median = v(i)._1.toFloat
             break
           }
@@ -195,6 +209,9 @@ object part1 {
       }
       median
     }
+
+    val medianFriendshipEdgesIn = getMedianFromCompressedEdgeCounts(compressedDegreesIn, friendshipDistinctUserCount)
+    val medianFriendshipEdgesOut = getMedianFromCompressedEdgeCounts(compressedDegreesOut, friendshipDistinctUserCount)
 
     //Print results
     println("Task 1: LineCount")
@@ -231,14 +248,13 @@ object part1 {
     top10InFriendships.foreach(u => printf("   - %s => %d (in), %d (out)\n", u._1, u._2._2, u._2._1))
     println("   OUT")
     top10OutFriendships.foreach(u => printf("   - %s => %d (in), %d (out)\n", u._1, u._2._2, u._2._1))
-    println("b) Average and median degrees:")
+    println("b) Average and median friendship edges:")
     println("   IN: ")
-    printf("     Mean: %.2f\n", averageDegreesIn)
-    printf("     Median: %.2f\n", getMedian(tempIn, friendshipDistinctUserCount))
+    printf("     Mean: %.2f\n", averageFriendshipEdgesIn)
+    printf("     Median: %.2f\n", )
     println("   OUT: ")
-    printf("     Mean: %.2f\n", averageDegreesOut)
-    printf("     Median: %.2f\n", getMedian(tempOut, friendshipDistinctUserCount))
-
+    printf("     Mean: %.2f\n", averageFriendshipEdgesOut)
+    printf("     Median: %.2f\n", getMedianFromCompressedEdgeCounts(compressedDegreesOut, friendshipDistinctUserCount))
     sc.stop()
   }
 }
