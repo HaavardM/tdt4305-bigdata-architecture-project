@@ -16,7 +16,7 @@ object part1df {
       .master("local")
       .getOrCreate()
 
-    //Part 1: Load dataframes
+    //Task 5: Load dataframes
     val businessesDF =  spark.read
       .format("csv")
       .option("header", "true")
@@ -37,14 +37,20 @@ object part1df {
 
     topReviewsDF.show()
 
-    //Part 2:
+    //Task 6:
     //a)
     //Join reviews and businesses table by business_id
     val joinTable = topReviewsDF.join(businessesDF, Seq("business_id"))
-    joinTable.show(5)
-    //joinTable.coalesce(1).write.csv("results/join_dataframe.csv")
+    //joinTable.limit(100).coalesce(1).write.csv("results/task6a.csv")
+    //b)
+    //Store as a temporary table
+    joinTable.createOrReplaceTempView("task6b")
+    spark.table("task6b").show(10)
+    //c)
     //Find the top 20 most active users
-    topReviewsDF.groupBy("user_id").count().sort(desc("count")).show(20)
+    val top20 = topReviewsDF.groupBy("user_id").count().sort(desc("count")).limit(20)
+    top20.show(20)
+    //top20.coalesce(1).write.csv("results/task6c.csv")
     spark.stop()
 
   }

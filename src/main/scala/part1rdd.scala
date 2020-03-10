@@ -209,23 +209,25 @@ object part1rdd {
     val medianFriendshipEdgesIn = getMedianFromCompressedEdgeCounts(friendshipCompressedEdgeCountIn, friendshipDistinctUserCount)
     val medianFriendshipEdgesOut = getMedianFromCompressedEdgeCounts(friendshipCompressedEdgeCountOut, friendshipDistinctUserCount)
 
-    //Save CSV results for RDDs
-    /*reviewsPerYear.
+    /*Save CSV results for
+    //Task 2D
+    reviewsPerYear.
       coalesce(1).sortByKey().
       map(l => l._1.toString + "\t" + l._2.toString).
-      saveAsTextFile("results/reviews_per_year.csv")
+      saveAsTextFile("results/task2D.csv")
 
+    //Task 3C
     businessPostalCodeCentroid.
       map(l => {
         l._1.toString + "\t" + l._2._1.toString + "\t" + l._2._2.toString
       }).coalesce(1).
-      saveAsTextFile("results/postal_code_centroids.csv")
+      saveAsTextFile("results/task3C.csv")
 
+    //Task 3A
     avgBusinessRatingByCity.
       map(l => l._1 + "\t" + l._2.toString).
       coalesce(1).
-      saveAsTextFile("results/average_business_rating_by_city.csv")
-    */
+      saveAsTextFile("results/task3A.csv") */
     //Print results
     println("Task 1: LineCount")
     println("- businesses      => " + businessCount)
