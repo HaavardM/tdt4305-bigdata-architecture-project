@@ -7,7 +7,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.io.Source
 
-object part2 {
+object part2noinmemory {
 
   val ReviewsIDIndex = 0
   val ReviewsUserIndex = 1
@@ -22,23 +22,14 @@ object part2 {
     val sc = new SparkContext(conf)
     sc.setLogLevel("ERROR")
 
-    //Load stop words to set
-    val rawStopWords = mutable.HashSet[String]()
-    for(line <- Source.fromFile("stopwords.txt").getLines) {
-      rawStopWords.add(line)
-    }
-    //Broadcast stop words to all nodes
-    val stopWordsBroadcast = sc.broadcast(rawStopWords.toSet)
-
-    //Load word sentiment to hash map
-    val rawSentiment = mutable.HashMap[String, Int]()
-    for (line <- Source.fromFile("AFINN-111.txt").getLines()) {
-      val split = line.split('\t')
-      rawSentiment(split(0)) = split(1).toInt
-    }
-    //Broadcast sentiments to all nodes
-    val sentimentBroadcast = sc.broadcast(rawSentiment.toMap)
-
+    //Load stop words
+    val stopwordsRDD = sc.textFile("stopwords.txt").map((_, false))
+    //Load sentiment words
+    val sentimentRDD = sc.textFile("AFINN-111.txt").map(l => {
+      val split = l.split('\t')
+      (split(0), split(1).toInt)
+    })
+    //Load reviews
     val yelpReviewRDD = sc.textFile("data/yelp_top_reviewers_with_reviews.csv")
       .mapPartitionsWithIndex((index, it) => if (index == 0) it.drop(1) else it)
 
@@ -50,7 +41,7 @@ object part2 {
       (businessID, text)
     })
 
-    val withoutStopWords = reviewsRDD.map(r => {
+    val withoutStopWords = reviewsRDD.flatMap(r => {
       val businessID = r._1
       val text = r._2
       val words = text.split(' ')
@@ -61,22 +52,17 @@ object part2 {
           .trim()
           .replaceAll("\\W", "")
           .toLowerCase()
-        //add it to the output if it is not a stop word and not empty
-        if (!stopWordsBroadcast.value.contains(w) && w != "") {
-          outputs += w
-        }
+        outputs += w
       }
-      (businessID, outputs.toList)
-    })
+      outputs.toList.map(w => (w, businessID))
+    }).leftOuterJoin(stopwordsRDD)
+      .filter(_._2._2.getOrElse(true))
+      .map(l => (l._1, l._2._1))
 
-    val reviewSentimentRDD = withoutStopWords.map(r => {
-      val businessIDIndex = r._1
-      val sentiments = r._2.map(w => sentimentBroadcast.value.getOrElse(w, 0))
-      val sentiment = sentiments.reduceOption(_+_).getOrElse(0)
-      (businessIDIndex, sentiment)
-    })
-
-    val businessSentimentRDD = reviewSentimentRDD.reduceByKey(_+_)
+    val businessSentimentRDD = withoutStopWords
+      .join(sentimentRDD)
+      .map(w => (w._2._1, w._2._2))
+      .reduceByKey(_+_)
 
     //Implicitely define the desired ordering
     implicit val ordering = Ordering.Int.reverse
