@@ -96,8 +96,7 @@ object part2 {
     implicit val ordering = Ordering.Int.reverse
     //Sort by sentiment
     val topKreviewsRDD = businessSentimentRDD.sortBy(_._2)//.persist()
-    //Combine into one partition and save
-    topKreviewsRDD.coalesce(1).saveAsTextFile("results/topksentiment.csv")
+
 
     //Take k top
     //uncomment persist above to speed up the computation (assuming the result fit in memory)
@@ -106,6 +105,10 @@ object part2 {
     topKreviewsRDD.take(k).zipWithIndex foreach { case(el, i) =>
       printf("%d: Business %s => sentiment %d\n", i, el._1, el._2)
     }
+    
+    //Combine into one partition and save
+    topKreviewsRDD.coalesce(1).saveAsTextFile("results/topksentiment.csv")
+
     sc.stop()
 
   }
