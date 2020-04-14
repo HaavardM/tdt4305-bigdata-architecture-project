@@ -16,9 +16,10 @@ object part2 {
   val ReviewsDateIndex = 4
 
   def main(args: Array[String]) = {
-    val conf = new SparkConf().
-      setMaster("local[4]").
-      setAppName("part2")
+    val conf = new SparkConf()
+      .setMaster("local[4]")
+      .setAppName("part2")
+      //.set("spark.hadoop.validateOutputSpecs", "false") //Avoid error when resultfile exists already
     val sc = new SparkContext(conf)
     sc.setLogLevel("ERROR")
 
@@ -39,49 +40,72 @@ object part2 {
     //Broadcast sentiments to all nodes
     val sentimentBroadcast = sc.broadcast(rawSentiment.toMap)
 
+    //Load reviews into RDD, drop first row (column description)
     val yelpReviewRDD = sc.textFile("data/yelp_top_reviewers_with_reviews.csv")
       .mapPartitionsWithIndex((index, it) => if (index == 0) it.drop(1) else it)
 
-    //BusinessID => Review Text
+    //Create key value pair from business_id to review text
+    //review ID is omitted as it is not of any interest
     val reviewsRDD = yelpReviewRDD.map(line => {
+      //Split by tabular
       val split = line.split('\t')
-      val text = new String(Base64.getMimeDecoder.decode(split(ReviewsTextIndex)), StandardCharsets.UTF_8)
+      //Decode base64 review text and get bytes
+      val b64 = Base64.getMimeDecoder.decode(split(ReviewsTextIndex))
+      //Interpret bytes as UTF_8 and create string
+      val text = new String(b64, StandardCharsets.UTF_8)
+      //Get business id
       val businessID = split(ReviewsBusinessIDIndex)
+      //Return key-value pair
       (businessID, text)
     })
 
-    val withoutStopWords = reviewsRDD.map(r => {
+    //Remove stopwords
+    val withoutStopWordsRDD = reviewsRDD.map(r => {
       val businessID = r._1
       val text = r._2
-      val words = text.split(' ')
-      var outputs = ListBuffer[String]()
-      for (word <- words) {
-        //clean word
-        val w = word
-          .trim()
-          .replaceAll("\\W", "")
-          .toLowerCase()
-        //add it to the output if it is not a stop word and not empty
-        if (!stopWordsBroadcast.value.contains(w) && w != "") {
-          outputs += w
-        }
-      }
-      (businessID, outputs.toList)
+      //Clean and filter words in memory
+      val words = text
+        .split(' ')
+        .map(_.trim() //Remove whitespace
+              .replaceAll("\\W", "") //Remove all non-word-characters using regex
+              .toLowerCase() //Convert to lower case
+        ).filter(word => {
+          //Only keep words which are not empty and not stopwords
+          !word.isEmpty() && !stopWordsBroadcast.value.contains(word)
+        })
+      (businessID, words.toList)
     })
 
-    val reviewSentimentRDD = withoutStopWords.map(r => {
+    //reviewSentimentRDD contains key-value pairs,
+    //businessID => sentiment, one for each review.
+    val reviewSentimentRDD = withoutStopWordsRDD.map(r => {
       val businessIDIndex = r._1
-      val sentiments = r._2.map(w => sentimentBroadcast.value.getOrElse(w, 0))
+      val words = r._2
+      //Map words to sentiment, or zero if word not found
+      val sentiments = words.map(w => sentimentBroadcast.value.getOrElse(w, 0))
+      //Aggregate sentiments for all words in a review
       val sentiment = sentiments.reduceOption(_+_).getOrElse(0)
+      //Return sentiment for one review for a business
       (businessIDIndex, sentiment)
     })
 
+    //Aggregate sentiments from all reviews for each business
     val businessSentimentRDD = reviewSentimentRDD.reduceByKey(_+_)
 
-    //Implicitely define the desired ordering
+    //Implicitely define the desired ordering to be descending order
     implicit val ordering = Ordering.Int.reverse
-    val topKreviewsRDD = businessSentimentRDD.sortBy(_._2)
+    //Sort by sentiment
+    val topKreviewsRDD = businessSentimentRDD.sortBy(_._2)//.persist()
+    //Combine into one partition and save
     topKreviewsRDD.coalesce(1).saveAsTextFile("results/topksentiment.csv")
+
+    //Take k top
+    //uncomment persist above to speed up the computation (assuming the result fit in memory)
+    val k = 10
+    //Already ordered
+    topKreviewsRDD.take(k).zipWithIndex foreach { case(el, i) =>
+      printf("%d: Business %s => sentiment %d\n", i, el._1, el._2)
+    }
     sc.stop()
 
   }
