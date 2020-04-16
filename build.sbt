@@ -9,5 +9,5 @@ val sparkVersion = "2.4.5"
 libraryDependencies += "org.apache.spark" %% "spark-core" % sparkVersion
 libraryDependencies += "org.apache.spark" %% "spark-sql" % sparkVersion
 
-mainClass in (Compile, packageBin) := Some("part2")
+mainClass in (Compile, packageBin) := Some("sentiment_analysis")
 

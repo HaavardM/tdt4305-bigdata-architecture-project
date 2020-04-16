@@ -92,22 +92,32 @@ object sentiment_analysis {
     //Aggregate sentiments from all reviews for each business
     val businessSentimentRDD = reviewSentimentRDD.reduceByKey(_+_)
 
+
+    /*
+    Sorting all businesses by sentiment
+    We could also have used businessSentimentRDD.takeOrdered(k) to get the top-k businesses more effeciently. 
+    We did not want to assume k-elements neccessarily was small enough to fit on one computer,
+    so we used sort to continue working with RDDs. 
+    */
+
     //Implicitely define the desired ordering to be descending order
     implicit val ordering = Ordering.Int.reverse
     //Sort by sentiment
-    val topKreviewsRDD = businessSentimentRDD.sortBy(_._2)//.persist()
+    val topReviewsRDD = businessSentimentRDD.sortBy(_._2)//.persist()
 
-
+    
+    /*******From now on we assume the result set is small enough to fit in memory on one computer******/
     //Take k top
-    //uncomment persist above to speed up the computation (assuming the result fit in memory)
+    //uncomment persist above to speed up the computation
     val k = 10
-    //Already ordered
-    topKreviewsRDD.take(k).zipWithIndex foreach { case(el, i) =>
+    //Already ordered, so we take the first k elements using take
+    //and print them to the console
+    topReviewsRDD.take(k).zipWithIndex foreach { case(el, i) =>
       printf("%d: Business %s => sentiment %d\n", i, el._1, el._2)
     }
     
-    //Combine into one partition and save
-    topKreviewsRDD.coalesce(1).saveAsTextFile("results/topksentiment.csv")
+    //Combine all businesses into one partition and save to textfile
+    topReviewsRDD.coalesce(1).saveAsTextFile("results/topksentiment.csv")
 
     sc.stop()
 
